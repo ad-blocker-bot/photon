@@ -37,7 +37,7 @@ const float atmosphere_outer_radius_sq = atmosphere_outer_radius * atmosphere_ou
 // Atmosphere coefficients
 
 const float air_mie_albedo           = 0.9;
-const float air_mie_energy_parameter = 3000.0; // Energy parameter for the Klein-Nishina phase function
+const float air_mie_energy_parameter = 3000.0; // Energy parameter for the Klein-Nishina phase function default 3000
 const float air_mie_g                = 0.77;    // Anisotropy parameter for Henyey-Greenstein phase function
 
 const vec2 air_scale_heights = vec2(8.4e3, 1.25e3); // m
@@ -54,24 +54,29 @@ uniform float atmosphere_saturation_boost_amount;
 
 float atmosphere_mie_phase(float nu, bool use_klein_nishina_phase) {
 	return use_klein_nishina_phase
-		? klein_nishina_phase(nu, air_mie_energy_parameter)
+		? klein_nishina_phase(nu,air_mie_energy_parameter)
+		: henyey_greenstein_phase(nu, air_mie_g);
+}
+
+float atmosphere_mie_phase_sun(float nu, bool use_klein_nishina_phase) {
+	return use_klein_nishina_phase
+		? klein_nishina_phase_area(nu,air_mie_energy_parameter,sun_angular_radius)
 		: henyey_greenstein_phase(nu, air_mie_g);
 }
 
 float atmosphere_mie_phase_moon(float nu, bool use_klein_nishina_phase) {
 	// Blend between HG and KN based on moon phase
 	// Idea and implementation from Foozey (modified)
-
 	float t = float(moonPhase) / 4.0;
 	t = t > 1.0 ? 2.0 - t : t;
 	t = sqr(1.0 - t) * 0.95 + 0.05;
-
 	return mix(
 		henyey_greenstein_phase(nu, air_mie_g),
-		klein_nishina_phase(nu, air_mie_energy_parameter),
+		klein_nishina_phase_area(nu, air_mie_energy_parameter,pi*moon_angular_radius),
 		t * float(use_klein_nishina_phase)
 	);
 }
+
 
 // Post-processing applied to the atmosphere color
 vec3 atmosphere_post_processing(vec3 atmosphere) {
@@ -333,9 +338,9 @@ vec3 atmosphere_scattering(
 	vec3 scattering_mc = texture(ATMOSPHERE_SCATTERING_LUT, uv_mc).rgb;
 	vec3 scattering_mm = texture(ATMOSPHERE_SCATTERING_LUT, uv_mm).rgb;
 
-	float mie_phase_sun  = atmosphere_mie_phase(nu_sun, use_klein_nishina_phase);
-	float mie_phase_moon = atmosphere_mie_phase_moon(nu_moon, use_klein_nishina_phase);
-
+	float mie_phase_sun  = atmosphere_mie_phase_sun(nu_sun, use_klein_nishina_phase);
+	float mie_phase_moon = atmosphere_mie_phase_moon(nu_moon, use_klein_nishina_phase); 
+	
 	vec3 atmosphere = (scattering_sc + scattering_sm * mie_phase_sun)  * sun_color
 	     + (scattering_mc + scattering_mm * mie_phase_moon) * moon_color;
 
